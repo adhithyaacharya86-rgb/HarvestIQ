@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart Irrigation — Live Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #171d26;
+    --panel-border: #263040;
+    --text: #e6edf3;
+    --muted: #8b98a8;
+    --accent: #3fb950;
+    --accent-dim: rgba(63,185,80,0.15);
+    --warn: #e3b341;
+    --danger: #f85149;
+    --ok-bg: rgba(63,185,80,0.12);
+    --off-bg: rgba(139,148,168,0.1);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    padding: 24px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+  .conn-controls { display: flex; align-items: center; gap: 10px; }
+  button {
+    background: var(--accent);
+    color: #04210a;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: 0.88; }
+  button:disabled { background: #3a4452; color: var(--muted); cursor: not-allowed; }
+  button.secondary { background: #2a3444; color: var(--text); }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--off-bg);
+    color: var(--muted);
+  }
+  .status-pill.live { background: var(--ok-bg); color: var(--accent); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .dot.live { animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 800px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card .label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .card .value small { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .bar-track {
+    margin-top: 10px;
+    height: 6px;
+    border-radius: 3px;
+    background: #222c38;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width .3s ease, background .3s ease;
+  }
+
+  .relay-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .relay-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .relay-info .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .relay-state { font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .relay-state.on { color: var(--accent); }
+  .relay-state.off { color: var(--muted); }
+  .relay-buttons button { padding: 7px 14px; font-size: 12px; margin-left: 6px; }
+  .relay-buttons button.off-btn { background: #3a4452; color: var(--text); }
+
+  .chart-panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 20px;
+  }
+  .chart-panel .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px; }
+  #chart { width: 100%; height: 260px; display: block; }
+
+  .legend { display: flex; gap: 18px; margin-top: 8px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+  .log-panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 12px 18px;
+  }
+  .log-panel .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+  #log {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    height: 110px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+
+  .banner {
+    background: rgba(227,179,65,0.1);
+    border: 1px solid rgba(227,179,65,0.3);
+    color: var(--warn);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="banner" id="unsupportedBanner">
+    This browser doesn't support the Web Serial API. Open this page in desktop Chrome or Edge.
+  </div>
+
+  <header>
+    <div>
+      <h1>Smart Irrigation — Live Dashboard</h1>
+      <div class="sub">Real-time serial monitoring for the Arduino Uno irrigation system</div>
+    </div>
+    <div class="conn-controls">
+      <span class="status-pill" id="statusPill"><span class="dot" id="statusDot"></span><span id="statusText">Disconnected</span></span>
+      <button id="connectBtn">Connect to Arduino</button>
+      <button id="disconnectBtn" class="secondary" style="display:none;">Disconnect</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Soil Moisture</div>
+      <div class="value"><span id="soilVal">—</span><small> / 1023</small></div>
+      <div class="bar-track"><div class="bar-fill" id="soilBar"></div></div>
+    </div>
+    <div class="card">
+      <div class="label">Air Quality (MQ135)</div>
+      <div class="value"><span id="gasVal">—</span><small> / 1023</small></div>
+      <div class="bar-track"><div class="bar-fill" id="gasBar"></div></div>
+    </div>
+    <div class="card">
+      <div class="label">Water Level</div>
+      <div class="value"><span id="waterVal">—</span><small> / 1023</small></div>
+      <div class="bar-track"><div class="bar-fill" id="waterBar"></div></div>
+    </div>
+    <div class="card">
+      <div class="label">Humidity (raw)</div>
+      <div class="value"><span id="humidityVal">—</span><small> / 1023</small></div>
+      <div class="bar-track"><div class="bar-fill" id="humidityBar"></div></div>
+    </div>
+  </div>
+
+  <div class="relay-row">
+    <div class="relay-card">
+      <div class="relay-info">
+        <div class="label">Irrigation Pump</div>
+        <div class="relay-state off" id="pumpState">OFF</div>
+      </div>
+      <div class="relay-buttons">
+        <button id="pumpOnBtn">ON</button>
+        <button id="pumpOffBtn" class="off-btn">OFF</button>
+      </div>
+    </div>
+    <div class="relay-card">
+      <div class="relay-info">
+        <div class="label">Air Fan</div>
+        <div class="relay-state off" id="fanState">OFF</div>
+      </div>
+      <div class="relay-buttons">
+        <button id="fanOnBtn">ON</button>
+        <button id="fanOffBtn" class="off-btn">OFF</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-panel">
+    <div class="label">Live Trend (last 60 readings)</div>
+    <svg id="chart" viewBox="0 0 1000 260" preserveAspectRatio="none"></svg>
+    <div class="legend">
+      <div class="legend-item"><span class="swatch" style="background:#3fb950;"></span>Soil</div>
+      <div class="legend-item"><span class="swatch" style="background:#e3b341;"></span>Gas (MQ135)</div>
+      <div class="legend-item"><span class="swatch" style="background:#58a6ff;"></span>Water</div>
+      <div class="legend-item"><span class="swatch" style="background:#bc8cff;"></span>Humidity</div>
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <div class="label">Raw Serial Log</div>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  const connectBtn = document.getElementById('connectBtn');
+  const disconnectBtn = document.getElementById('disconnectBtn');
+  const statusPill = document.getElementById('statusPill');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const logEl = document.getElementById('log');
+  const unsupportedBanner = document.getElementById('unsupportedBanner');
+
+  const MAX_POINTS = 60;
+  const MAX_SCALE = 1023;
+  const history = { soil: [], gas: [], water: [], humidity: [] };
+
+  let port, reader, writer, keepReading = false, readableClosed;
+
+  if (!('serial' in navigator)) {
+    unsupportedBanner.style.display = 'block';
+    connectBtn.disabled = true;
+  }
+
+  function setConnected(isConnected) {
+    connectBtn.style.display = isConnected ? 'none' : 'inline-block';
+    disconnectBtn.style.display = isConnected ? 'inline-block' : 'none';
+    statusPill.classList.toggle('live', isConnected);
+    statusDot.classList.toggle('live', isConnected);
+    statusText.textContent = isConnected ? 'Live' : 'Disconnected';
+  }
+
+  function logLine(text) {
+    const time = new Date().toLocaleTimeString();
+    logEl.textContent += `[${time}] ${text}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function updateCard(prefix, value) {
+    const pct = Math.max(0, Math.min(100, (value / MAX_SCALE) * 100));
+    document.getElementById(prefix + 'Val').textContent = value;
+    const bar = document.getElementById(prefix + 'Bar');
+    bar.style.width = pct + '%';
+    bar.style.background = pct > 75 ? 'var(--danger)' : pct > 45 ? 'var(--warn)' : 'var(--accent)';
+  }
+
+  function updateRelay(name, isOn) {
+    const stateEl = document.getElementById(name + 'State');
+    stateEl.textContent = isOn ? 'ON' : 'OFF';
+    stateEl.classList.toggle('on', isOn);
+    stateEl.classList.toggle('off', !isOn);
+  }
+
+  function pushHistory(key, value) {
+    history[key].push(value);
+    if (history[key].length > MAX_POINTS) history[key].shift();
+  }
+
+  function drawChart() {
+    const svg = document.getElementById('chart');
+    const w = 1000, h = 260, pad = 10;
+    const colors = { soil: '#3fb950', gas: '#e3b341', water: '#58a6ff', humidity: '#bc8cff' };
+    let paths = '';
+
+    Object.keys(history).forEach(key => {
+      const points = history[key];
+      if (points.length < 2) return;
+      const stepX = (w - pad * 2) / (MAX_POINTS - 1);
+      const startX = w - pad - (points.length - 1) * stepX;
+      let d = '';
+      points.forEach((val, i) => {
+        const x = startX + i * stepX;
+        const y = h - pad - (val / MAX_SCALE) * (h - pad * 2);
+        d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+      });
+      paths += `<path d="${d}" fill="none" stroke="${colors[key]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    });
+
+    svg.innerHTML = `
+      <line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}" stroke="#263040" stroke-width="1"/>
+      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}" stroke="#263040" stroke-width="1"/>
+      ${paths}
+    `;
+  }
+
+  function handlePacket(obj) {
+    if ('soil' in obj) { updateCard('soil', obj.soil); pushHistory('soil', obj.soil); }
+    if ('gas' in obj) { updateCard('gas', obj.gas); pushHistory('gas', obj.gas); }
+    if ('water' in obj) { updateCard('water', obj.water); pushHistory('water', obj.water); }
+    if ('humidity' in obj) { updateCard('humidity', obj.humidity); pushHistory('humidity', obj.humidity); }
+    if ('pump' in obj) updateRelay('pump', obj.pump);
+    if ('fan' in obj) updateRelay('fan', obj.fan);
+    drawChart();
+  }
+
+  let lineBuffer = '';
+
+  async function readLoop() {
+    const decoder = new TextDecoderStream();
+    readableClosed = port.readable.pipeTo(decoder.writable);
+    reader = decoder.readable.getReader();
+
+    try {
+      while (keepReading) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) {
+          lineBuffer += value;
+          let newlineIndex;
+          while ((newlineIndex = lineBuffer.indexOf('\n')) >= 0) {
+            const line = lineBuffer.slice(0, newlineIndex).trim();
+            lineBuffer = lineBuffer.slice(newlineIndex + 1);
+            if (!line) continue;
+            logLine(line);
+            if (line.startsWith('{')) {
+              try {
+                handlePacket(JSON.parse(line));
+              } catch (e) {
+                // Non-JSON or partial line from startup messages — ignore.
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      logLine('Read error: ' + err.message);
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  async function connect() {
+    try {
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+
+      const textEncoder = new TextEncoderStream();
+      const writableClosed = textEncoder.readable.pipeTo(port.writable);
+      writer = textEncoder.writable.getWriter();
+
+      keepReading = true;
+      setConnected(true);
+      logLine('Connected at 115200 baud.');
+      readLoop();
+
+      port.addEventListener('disconnect', () => {
+        logLine('Device disconnected.');
+        setConnected(false);
+      });
+    } catch (err) {
+      logLine('Connection failed: ' + err.message);
+    }
+  }
+
+  async function disconnect() {
+    keepReading = false;
+    try {
+      if (reader) await reader.cancel();
+      if (writer) { await writer.close(); }
+      if (port) await port.close();
+    } catch (err) {
+      logLine('Disconnect error: ' + err.message);
+    }
+    setConnected(false);
+    logLine('Disconnected.');
+  }
+
+  async function sendCommand(cmd) {
+    if (!writer) { logLine('Not connected — command ignored: ' + cmd); return; }
+    try {
+      await writer.write(cmd + '\n');
+      logLine('Sent: ' + cmd);
+    } catch (err) {
+      logLine('Send error: ' + err.message);
+    }
+  }
+
+  connectBtn.addEventListener('click', connect);
+  disconnectBtn.addEventListener('click', disconnect);
+  document.getElementById('pumpOnBtn').addEventListener('click', () => sendCommand('PUMP_ON'));
+  document.getElementById('pumpOffBtn').addEventListener('click', () => sendCommand('PUMP_OFF'));
+  document.getElementById('fanOnBtn').addEventListener('click', () => sendCommand('FAN_ON'));
+  document.getElementById('fanOffBtn').addEventListener('click', () => sendCommand('FAN_OFF'));
+})();
+</script>
+</body>
+</html>
